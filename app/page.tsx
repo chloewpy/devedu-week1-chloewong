@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { supabase } from '@/lib/supabaseClient';
+import { MessageList } from '@/components/MessageList';
+import { z } from 'zod';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import {
@@ -11,11 +14,21 @@ import {
 } from "@/components/ui/hover-card";
 import Image from "next/image";
 
+const formSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  message: z.string().min(5, 'Message must be at least 5 characters'),
+});
+
 export default function Home() {
-  const [comments, setComments] = useState({
-    slide1: "",
-    slide2: "",
-    slide3: ""
+  const [formData, setFormData] = useState({
+    slide1: { name: '', message: '' },
+    slide2: { name: '', message: '' },
+    slide3: { name: '', message: '' }
+  });
+  const [isSubmitting, setIsSubmitting] = useState({
+    slide1: false,
+    slide2: false,
+    slide3: false
   });
   const [posted, setPosted] = useState({
     slide1: false,
@@ -23,16 +36,52 @@ export default function Home() {
     slide3: false
   });
 
-  const handlePost = (slide: string) => {
-    if (comments[slide as keyof typeof comments].trim()) {
-      setPosted(prev => ({ ...prev, [slide]: true }));
-      toast("Comment posted successfully!", {
-        description: "Your comment has been saved.",
-      });
-    } else {
-      toast("Please enter a comment first", {
-        description: "The text area cannot be empty.",
-      });
+  const handleFormChange = (slide: string, field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [slide]: { ...prev[slide as keyof typeof prev], [field]: value }
+    }));
+  };
+
+  const handleSubmit = async (slide: string) => {
+    const currentFormData = formData[slide as keyof typeof formData];
+    setIsSubmitting(prev => ({ ...prev, [slide]: true }));
+
+    const parsed = formSchema.safeParse(currentFormData);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
+      setIsSubmitting(prev => ({ ...prev, [slide]: false }));
+      return;
+    }
+
+    try {
+      console.log('Submitting comment:', parsed.data);
+      console.log('Supabase client:', supabase);
+      
+      const { data, error } = await supabase.from('Comments').insert([parsed.data]).select();
+      
+      console.log('Supabase response:', { data, error });
+      
+      if (error) {
+        console.log('Supabase error:', error);
+        const errorMessage = error?.message || 'Database error occurred';
+        toast.error(`Database error: ${errorMessage}`);
+      } else {
+        console.log('Comment saved successfully:', data);
+        toast.success('Comment posted successfully!', {
+          description: "Your comment has been saved for Golden.",
+        });
+        setFormData(prev => ({
+          ...prev,
+          [slide]: { name: '', message: '' }
+        }));
+        setPosted(prev => ({ ...prev, [slide]: true }));
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(prev => ({ ...prev, [slide]: false }));
     }
   };
 
@@ -70,7 +119,7 @@ export default function Home() {
       
       {/* Main Content */}
       <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-3xl ml-16">
         <Carousel
           className="w-full"
           opts={{
@@ -80,44 +129,55 @@ export default function Home() {
         >
           <CarouselContent>
             <CarouselItem>
-              <Card className="w-full max-w-md mx-auto">
+              <Card className="w-full max-w-3xl mx-auto">
       <CardHeader>
                   <CardTitle>Felt cute might delete later</CardTitle>
       </CardHeader>
       <CardContent>
-                  <div className="mb-4">
-                    <Image
-                      src="/cute.jpg"
-                      alt="Cute Cat"
-                      width={300}
-                      height={320}
-                      className="mx-auto object-cover rounded-lg"
-                      style={{ aspectRatio: '15/16' }}
-                    />
-                  </div>
-                  <p className="text-gray-600 mb-4">
-                    Send a message to Golden.
-                  </p>
+                  <div className="flex gap-6">
+                    <div className="flex-shrink-0">
+                      <Image
+                        src="/cute.jpg"
+                        alt="Cute Cat"
+                        width={300}
+                        height={320}
+                        className="object-cover rounded-lg"
+                        style={{ aspectRatio: '15/16' }}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-600 mb-4">
+                        Leave a comment for Golden.
+                      </p>
                   {!posted.slide1 ? (
-                    <>
+                    <div className="space-y-3">
+                      <input
+                        name="name"
+                        placeholder="Your name"
+                        value={formData.slide1.name}
+                        onChange={(e) => handleFormChange("slide1", "name", e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        style={{ borderColor: '#d1d5db' }}
+                        disabled={isSubmitting.slide1}
+                      />
                       <textarea
-                        placeholder="Enter your message here..."
-                        className="w-full p-2 border rounded-md mb-4 resize-none"
-                        style={{
-                          borderColor: comments.slide1.trim() ? '#ff5900' : '#d1d5db',
-                          borderWidth: comments.slide1.trim() ? '2px' : '1px'
-                        }}
-                        rows={2}
-                        value={comments.slide1}
-                        onChange={(e) => setComments(prev => ({ ...prev, slide1: e.target.value }))}
+                        name="message"
+                        placeholder="Your message for Golden..."
+                        value={formData.slide1.message}
+                        onChange={(e) => handleFormChange("slide1", "message", e.target.value)}
+                        className="w-full p-2 border rounded-md resize-none"
+                        style={{ borderColor: '#d1d5db' }}
+                        rows={3}
+                        disabled={isSubmitting.slide1}
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handlePost("slide1")}
-                          className="flex-1 px-4 py-2 text-white rounded transition-colors"
-                          style={{ backgroundColor: comments.slide1.trim() ? '#ff5900' : '#ffaa6e' }}
+                          onClick={() => handleSubmit("slide1")}
+                          disabled={isSubmitting.slide1}
+                          className="flex-1 px-4 py-2 text-white rounded transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: '#ff5900' }}
                         >
-                          Post Comment
+                          {isSubmitting.slide1 ? 'Posting...' : 'Post Comment'}
                         </button>
                         <button
                           onClick={() =>
@@ -135,12 +195,12 @@ export default function Home() {
                           Like Post
                         </button>
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <div className="mb-4">
                       <div className="bg-gray-100 p-4 rounded-md border-l-4 border-blue-500">
                         <p className="text-sm text-gray-600 mb-1">Your Comment:</p>
-                        <p className="text-gray-800">{comments.slide1}</p>
+                        <p className="text-gray-800">{formData.slide1.message}</p>
                       </div>
                       <button
                         onClick={() =>
@@ -159,6 +219,8 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                    </div>
+                  </div>
       </CardContent>
       <CardFooter>
                   <p className="text-sm text-gray-500">Posted Today</p>
@@ -166,44 +228,55 @@ export default function Home() {
     </Card>
             </CarouselItem>
             <CarouselItem>
-              <Card className="w-full max-w-md mx-auto">
+              <Card className="w-full max-w-3xl mx-auto">
                 <CardHeader>
                   <CardTitle>Unemployment-maxxing</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="mb-4">
-              <Image
-                src="/lazy.jpg"
-                alt="Lazy Cat"
-                width={300}
-                height={320}
-                className="mx-auto object-cover rounded-lg"
-                style={{ aspectRatio: '15/16' }}
-              />
-                  </div>
-                  <p className="text-gray-600 mb-4">
-                    Send a message to Golden.
-                  </p>
+                  <div className="flex gap-6">
+                    <div className="flex-shrink-0">
+                      <Image
+                        src="/lazy.jpg"
+                        alt="Lazy Cat"
+                        width={300}
+                        height={320}
+                        className="object-cover rounded-lg"
+                        style={{ aspectRatio: '15/16' }}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-600 mb-4">
+                        Leave a comment for Golden.
+                      </p>
                   {!posted.slide2 ? (
-                    <>
+                    <div className="space-y-3">
+                      <input
+                        name="name"
+                        placeholder="Your name"
+                        value={formData.slide2.name}
+                        onChange={(e) => handleFormChange("slide2", "name", e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        style={{ borderColor: '#d1d5db' }}
+                        disabled={isSubmitting.slide2}
+                      />
                       <textarea
-                        placeholder="Send a message to Golden..."
-                        className="w-full p-2 border rounded-md mb-4 resize-none"
-                        style={{
-                          borderColor: comments.slide2.trim() ? '#ff5900' : '#d1d5db',
-                          borderWidth: comments.slide2.trim() ? '2px' : '1px'
-                        }}
-                        rows={2}
-                        value={comments.slide2}
-                        onChange={(e) => setComments(prev => ({ ...prev, slide2: e.target.value }))}
+                        name="message"
+                        placeholder="Your message for Golden..."
+                        value={formData.slide2.message}
+                        onChange={(e) => handleFormChange("slide2", "message", e.target.value)}
+                        className="w-full p-2 border rounded-md resize-none"
+                        style={{ borderColor: '#d1d5db' }}
+                        rows={3}
+                        disabled={isSubmitting.slide2}
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handlePost("slide2")}
-                          className="flex-1 px-4 py-2 text-white rounded transition-colors"
-                          style={{ backgroundColor: comments.slide2.trim() ? '#ff5900' : '#ffaa6e' }}
+                          onClick={() => handleSubmit("slide2")}
+                          disabled={isSubmitting.slide2}
+                          className="flex-1 px-4 py-2 text-white rounded transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: '#ff5900' }}
                         >
-                          Post Comment
+                          {isSubmitting.slide2 ? 'Posting...' : 'Post Comment'}
                         </button>
                         <button
                           onClick={() =>
@@ -221,13 +294,13 @@ export default function Home() {
                           Like Post
                         </button>
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <div className="mb-4">
                       <div className="bg-gray-100 p-4 rounded-md border-l-4 border-green-500">
                         <p className="text-sm text-gray-600 mb-1">Your Comment:</p>
-                        <p className="text-gray-800">{comments.slide2}</p>
-        </div>
+                        <p className="text-gray-800">{formData.slide2.message}</p>
+                      </div>
                       <button
                         onClick={() =>
                         toast("You have liked this post", {
@@ -245,6 +318,8 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </CardContent>
                 <CardFooter>
                   <p className="text-sm text-gray-500">Posted Today</p>
@@ -252,44 +327,55 @@ export default function Home() {
               </Card>
             </CarouselItem>
             <CarouselItem>
-              <Card className="w-full max-w-md mx-auto">
+              <Card className="w-full max-w-3xl mx-auto">
                 <CardHeader>
                   <CardTitle>Merry Christmas</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="mb-4">
-                    <Image
-                      src="/christmas.jpg"
-                      alt="Christmas Cat"
-                      width={300}
-                      height={320}
-                      className="mx-auto object-cover rounded-lg"
-                      style={{ aspectRatio: '15/16' }}
-                    />
-                  </div>
-                  <p className="text-gray-600 mb-4">
-                    Send a message to Golden.
-                  </p>
+                  <div className="flex gap-6">
+                    <div className="flex-shrink-0">
+                      <Image
+                        src="/christmas.jpg"
+                        alt="Christmas Cat"
+                        width={300}
+                        height={320}
+                        className="object-cover rounded-lg"
+                        style={{ aspectRatio: '15/16' }}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-600 mb-4">
+                        Leave a comment for Golden.
+                      </p>
                   {!posted.slide3 ? (
-                    <>
+                    <div className="space-y-3">
+                      <input
+                        name="name"
+                        placeholder="Your name"
+                        value={formData.slide3.name}
+                        onChange={(e) => handleFormChange("slide3", "name", e.target.value)}
+                        className="w-full p-2 border rounded-md"
+                        style={{ borderColor: '#d1d5db' }}
+                        disabled={isSubmitting.slide3}
+                      />
                       <textarea
-                        placeholder="Send a message to Golden..."
-                        className="w-full p-2 border rounded-md mb-4 resize-none"
-                        style={{
-                          borderColor: comments.slide3.trim() ? '#ff5900' : '#d1d5db',
-                          borderWidth: comments.slide3.trim() ? '2px' : '1px'
-                        }}
-                        rows={2}
-                        value={comments.slide3}
-                        onChange={(e) => setComments(prev => ({ ...prev, slide3: e.target.value }))}
+                        name="message"
+                        placeholder="Your message for Golden..."
+                        value={formData.slide3.message}
+                        onChange={(e) => handleFormChange("slide3", "message", e.target.value)}
+                        className="w-full p-2 border rounded-md resize-none"
+                        style={{ borderColor: '#d1d5db' }}
+                        rows={3}
+                        disabled={isSubmitting.slide3}
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handlePost("slide3")}
-                          className="flex-1 px-4 py-2 text-white rounded transition-colors"
-                          style={{ backgroundColor: comments.slide3.trim() ? '#ff5900' : '#ffaa6e' }}
+                          onClick={() => handleSubmit("slide3")}
+                          disabled={isSubmitting.slide3}
+                          className="flex-1 px-4 py-2 text-white rounded transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: '#ff5900' }}
                         >
-                          Post Comment
+                          {isSubmitting.slide3 ? 'Posting...' : 'Post Comment'}
                         </button>
                         <button
                           onClick={() =>
@@ -307,12 +393,12 @@ export default function Home() {
                           Like Post
                         </button>
                       </div>
-                    </>
+                    </div>
                   ) : (
                     <div className="mb-4">
                       <div className="bg-gray-100 p-4 rounded-md border-l-4 border-red-500">
                         <p className="text-sm text-gray-600 mb-1">Your Comment:</p>
-                        <p className="text-gray-800">{comments.slide3}</p>
+                        <p className="text-gray-800">{formData.slide3.message}</p>
                       </div>
                       <button
                         onClick={() =>
@@ -331,6 +417,8 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </CardContent>
                 <CardFooter>
                   <p className="text-sm text-gray-500">Posted Today</p>
@@ -355,6 +443,14 @@ export default function Home() {
             className="hover:opacity-80 transition-opacity"
           />
         </Carousel>
+      </div>
+
+      {/* Messages Section */}
+      <div className="mt-8 px-4 ml-32">
+        <h2 className="text-xl font-semibold text-orange-900 mb-4">Messages for Golden</h2>
+        <div className="bg-white/90 backdrop-blur-sm rounded-lg p-6 shadow-lg max-w-5xl">
+          <MessageList />
+        </div>
       </div>
       </div>
     </div>
