@@ -1,0 +1,5 @@
+# Force Vercel to ignore cached files and rebuild everything
+node_modules
+.next
+.vercel
+*.log
