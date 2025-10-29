@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-// Initialize OpenAI with API key from environment variables
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: NextRequest) {
   try {
     const { message, context = 'cat' } = await request.json();
@@ -17,15 +12,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if API key is available
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Initialize OpenAI with API key from environment variables
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
     console.log('OpenAI API called with message:', message);
 
     // Create a cat-themed system prompt for Golden
     const systemPrompt = `You are Golden, a New Zealand-based cat who loves to respond to messages from humans. 
-    You should respond in a playful, cat-like manner with lots of "meow", "purr", and cat emojis. 
+    You should respond in a playful, cat-like manner with lots of "meow" and cat emojis. 
     Keep responses short (1-2 sentences) and friendly. 
-    If someone is commenting on your photos, be flattered and respond accordingly.
     If someone is asking about you, share fun cat facts about yourself.
-    Always maintain a cute, sassy cat personality.
+    Always maintain a cat-like personality.
     Use cat emojis.
     Be conversational and engaging like a real cat would be.`;
 
